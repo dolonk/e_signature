@@ -8,25 +8,25 @@ abstract class Failure {
 
 // Specific failures
 class ServerFailure extends Failure {
-  const ServerFailure([String message = 'Server error occurred']) : super(message);
+  const ServerFailure([super.message = 'Server error occurred']);
 }
 
 class CacheFailure extends Failure {
-  const CacheFailure([String message = 'Cache error occurred']) : super(message);
+  const CacheFailure([super.message = 'Cache error occurred']);
 }
 
 class NetworkFailure extends Failure {
-  const NetworkFailure([String message = 'Network error occurred']) : super(message);
+  const NetworkFailure([super.message = 'Network error occurred']);
 }
 
 class AuthFailure extends Failure {
-  const AuthFailure(String message, [String? code]) : super(message, code);
+  const AuthFailure(super.message, [super.code]);
 }
 
 class ValidationFailure extends Failure {
-  const ValidationFailure(String message) : super(message);
+  const ValidationFailure(super.message);
 }
 
 class FileFailure extends Failure {
-  const FileFailure(String message) : super(message);
+  const FileFailure(super.message);
 }

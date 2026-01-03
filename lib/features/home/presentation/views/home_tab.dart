@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../route/route_name.dart';
 import '../../../documents/presentation/widgets/document_card.dart';
 import '../../../documents/presentation/widgets/empty_documents.dart';
 
@@ -33,7 +34,8 @@ class HomeTab extends ConsumerWidget {
           return DocumentCard(
             document: document,
             onTap: () {
-              // Navigate to editor (Phase 4)
+              // Navigate to document editor (Phase 4)
+              Navigator.pushNamed(context, RouteName.editor, arguments: document);
             },
             onDelete: () {
               _showDeleteDialog(context, ref, document.id);
