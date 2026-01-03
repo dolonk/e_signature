@@ -22,7 +22,7 @@ dependencies:
   
   # Local Database
   isar_community: ^3.3.0
-  # isar_flutter_libs is included/managed by isar_community or not needed as separate legacy dep for this version
+  isar_community_flutter_libs: ^3.3.0
   
   # File Handling & Storage
   file_picker: ^8.1.6

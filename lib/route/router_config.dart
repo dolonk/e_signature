@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:interview_app/route/route_name.dart';
 import '../features/authentication/presentation/views/login_screen.dart';
 import '../features/authentication/presentation/views/register_screen.dart';
+import '../shared/widgets/main_navigation.dart';
 
 class RouteConfig {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -13,10 +14,7 @@ class RouteConfig {
         return MaterialPageRoute(builder: (_) => const RegisterScreen());
 
       case RouteName.home:
-        return MaterialPageRoute(
-          // Temporary placeholder until Home phase is started
-          builder: (_) => const Scaffold(body: Center(child: Text('Home Screen'))),
-        );
+        return MaterialPageRoute(builder: (_) => const MainNavigation());
 
       default:
         return MaterialPageRoute(

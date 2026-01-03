@@ -1,5 +1,6 @@
 import 'package:path_provider/path_provider.dart';
 import 'package:isar_community/isar.dart';
+import '../../features/documents/domain/entities/document_entity.dart';
 
 /// Service class to handle Isar database operations
 class IsarService {
@@ -13,14 +14,7 @@ class IsarService {
 
     final dir = await getApplicationDocumentsDirectory();
 
-    _isar = await Isar.open(
-      [
-        // Add schemas here as models are created
-        // Example: DocumentModelSchema, FieldModelSchema
-      ],
-      directory: dir.path,
-      name: 'esignature_db',
-    );
+    _isar = await Isar.open([DocumentEntitySchema], directory: dir.path, name: 'esignature_db');
 
     return _isar!;
   }

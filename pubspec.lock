@@ -472,6 +472,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.3.0"
+  isar_community_flutter_libs:
+    dependency: "direct main"
+    description:
+      name: isar_community_flutter_libs
+      sha256: "3c072d8d77e820196fa23839b88481c50d903c73b3c0db6e647b29509d04fe3b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.3.0"
   isar_community_generator:
     dependency: "direct dev"
     description:
