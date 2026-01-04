@@ -394,7 +394,35 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
     final currentPageFields = state.fields.where((f) => f.page == state.currentPage).toList();
     if (currentPageFields.isEmpty) return const SizedBox.shrink();
 
-    return Positioned.fill(
+    // Calculate actual displayed image dimensions based on PDF page aspect ratio
+    // This ensures field positions match the PDF generator output
+    double displayWidth = constraints.maxWidth;
+    double displayHeight = constraints.maxHeight;
+
+    if (state.pdfPageWidth > 0 && state.pdfPageHeight > 0) {
+      final pdfAspectRatio = state.pdfPageWidth / state.pdfPageHeight;
+      final containerAspectRatio = constraints.maxWidth / constraints.maxHeight;
+
+      if (containerAspectRatio > pdfAspectRatio) {
+        // Container is wider than PDF - height is the limiting factor
+        displayHeight = constraints.maxHeight;
+        displayWidth = displayHeight * pdfAspectRatio;
+      } else {
+        // Container is taller than PDF - width is the limiting factor
+        displayWidth = constraints.maxWidth;
+        displayHeight = displayWidth / pdfAspectRatio;
+      }
+    }
+
+    // Calculate offset to center the overlay with the image
+    final offsetX = (constraints.maxWidth - displayWidth) / 2;
+    final offsetY = (constraints.maxHeight - displayHeight) / 2;
+
+    return Positioned(
+      left: offsetX,
+      top: offsetY,
+      width: displayWidth,
+      height: displayHeight,
       child: Stack(
         clipBehavior: Clip.none,
         children: currentPageFields.map((field) {
@@ -403,8 +431,8 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
             field: field,
             isSelected: state.selectedField?.id == field.id,
             isDraggable: isEditMode,
-            pageWidth: constraints.maxWidth,
-            pageHeight: constraints.maxHeight,
+            pageWidth: displayWidth,
+            pageHeight: displayHeight,
             onTap: () {
               if (isEditMode) {
                 ref.read(editorViewModelProvider.notifier).selectField(field.id);
@@ -434,8 +462,40 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
       return;
     }
 
-    final xPercent = details.localPosition.dx / constraints.maxWidth;
-    final yPercent = details.localPosition.dy / constraints.maxHeight;
+    final state = ref.read(editorViewModelProvider);
+
+    // Calculate actual displayed image dimensions (same as _buildFieldOverlay)
+    double displayWidth = constraints.maxWidth;
+    double displayHeight = constraints.maxHeight;
+
+    if (state.pdfPageWidth > 0 && state.pdfPageHeight > 0) {
+      final pdfAspectRatio = state.pdfPageWidth / state.pdfPageHeight;
+      final containerAspectRatio = constraints.maxWidth / constraints.maxHeight;
+
+      if (containerAspectRatio > pdfAspectRatio) {
+        displayHeight = constraints.maxHeight;
+        displayWidth = displayHeight * pdfAspectRatio;
+      } else {
+        displayWidth = constraints.maxWidth;
+        displayHeight = displayWidth / pdfAspectRatio;
+      }
+    }
+
+    // Calculate offset from center
+    final offsetX = (constraints.maxWidth - displayWidth) / 2;
+    final offsetY = (constraints.maxHeight - displayHeight) / 2;
+
+    // Adjust tap position relative to actual image area
+    final adjustedX = details.localPosition.dx - offsetX;
+    final adjustedY = details.localPosition.dy - offsetY;
+
+    // Skip if tap is outside the image area
+    if (adjustedX < 0 || adjustedY < 0 || adjustedX > displayWidth || adjustedY > displayHeight) {
+      return;
+    }
+
+    final xPercent = adjustedX / displayWidth;
+    final yPercent = adjustedY / displayHeight;
 
     ref
         .read(editorViewModelProvider.notifier)

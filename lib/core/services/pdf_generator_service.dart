@@ -6,10 +6,8 @@ import 'package:path_provider/path_provider.dart';
 import '../../shared/entities/field_entity.dart';
 import '../../shared/entities/document_entity.dart';
 
-/// Service to generate final signed PDF with field overlays
 class PdfGeneratorService {
   /// Generate a signed PDF by overlaying field values onto the original document
-  /// Returns the File path of the generated PDF
   Future<File> generateSignedPdf({required DocumentEntity document, required List<FieldEntity> fields}) async {
     // Load original PDF
     final originalFile = File(document.localFilePath);
@@ -32,17 +30,12 @@ class PdfGeneratorService {
       final pageSize = page.size;
 
       // Convert percentage coordinates to actual PDF coordinates
-      // PDF coordinates are bottom-left origin, Flutter uses top-left
-      // So we need to flip the Y coordinate: pdfY = pageHeight - flutterY - elementHeight
       final x = field.xPercent * pageSize.width;
+      final y = field.yPercent * pageSize.height;
       final width = field.widthPercent * pageSize.width;
       final height = field.heightPercent * pageSize.height;
 
-      // CRITICAL: Flip Y coordinate for PDF coordinate system
-      final flutterY = field.yPercent * pageSize.height;
-      final pdfY = pageSize.height - flutterY - height;
-
-      final bounds = Rect.fromLTWH(x, pdfY, width, height);
+      final bounds = Rect.fromLTWH(x, y, width, height);
 
       switch (field.type) {
         case FieldType.text:
@@ -73,39 +66,11 @@ class PdfGeneratorService {
     return outputFile;
   }
 
+  // Text draw
   void _drawText(PdfPage page, String text, Rect bounds) {
-    final font = PdfStandardFont(PdfFontFamily.helvetica, 11);
-    final brush = PdfSolidBrush(PdfColor(0, 0, 0));
-
-    page.graphics.drawString(
-      text,
-      font,
-      brush: brush,
-      bounds: bounds,
-      format: PdfStringFormat(alignment: PdfTextAlignment.left, lineAlignment: PdfVerticalAlignment.middle),
-    );
-  }
-
-  void _drawSignature(PdfPage page, dynamic value, Rect bounds) {
-    if (value is Uint8List) {
-      // Image signature (drawn or uploaded)
-      try {
-        final image = PdfBitmap(value);
-        page.graphics.drawImage(image, bounds);
-      } catch (e) {
-        // Fallback to text if image fails
-        _drawSignatureText(page, 'Signature', bounds);
-      }
-    } else if (value is String && value.isNotEmpty) {
-      // Typed signature - use italic/cursive style
-      _drawSignatureText(page, value, bounds);
-    }
-  }
-
-  void _drawSignatureText(PdfPage page, String text, Rect bounds) {
-    // Use italic style to simulate handwriting
-    final font = PdfStandardFont(PdfFontFamily.timesRoman, 16, style: PdfFontStyle.italic);
-    final brush = PdfSolidBrush(PdfColor(0, 0, 139)); // Dark blue for signature
+    final fontSize = (bounds.height * 0.55).clamp(8.0, 20.0);
+    final font = PdfStandardFont(PdfFontFamily.helvetica, fontSize, style: PdfFontStyle.bold);
+    final brush = PdfSolidBrush(PdfColor(33, 33, 33));
 
     page.graphics.drawString(
       text,
@@ -116,28 +81,57 @@ class PdfGeneratorService {
     );
   }
 
-  void _drawCheckbox(PdfPage page, bool isChecked, Rect bounds) {
-    final font = PdfStandardFont(PdfFontFamily.zapfDingbats, 14);
-    final brush = PdfSolidBrush(PdfColor(0, 128, 0)); // Green for checked
+  // Signature text draw
+  void _drawSignatureText(PdfPage page, String text, Rect bounds) {
+    final fontSize = (bounds.height * 0.60).clamp(10.0, 24.0);
+    final font = PdfStandardFont(PdfFontFamily.timesRoman, fontSize, style: PdfFontStyle.italic);
+    final brush = PdfSolidBrush(PdfColor(33, 33, 33));
 
-    // Zapf Dingbats: ✓ = char 52, ✗ = char 56
-    final symbol = isChecked ? '4' : ''; // '4' in Zapf Dingbats is checkmark
+    page.graphics.drawString(
+      text,
+      font,
+      brush: brush,
+      bounds: bounds,
+      format: PdfStringFormat(alignment: PdfTextAlignment.center, lineAlignment: PdfVerticalAlignment.middle),
+    );
+  }
+
+  // Image signature
+  void _drawSignature(PdfPage page, dynamic value, Rect bounds) {
+    if (value is Uint8List) {
+      try {
+        final image = PdfBitmap(value);
+        page.graphics.drawImage(image, bounds);
+      } catch (e) {
+        _drawSignatureText(page, 'Signature', bounds);
+      }
+    } else if (value is String && value.isNotEmpty) {
+      _drawSignatureText(page, value, bounds);
+    }
+  }
+
+  // Checkbox draw
+  void _drawCheckbox(PdfPage page, bool isChecked, Rect bounds) {
+    final checkBrush = PdfSolidBrush(PdfColor(255, 152, 0));
+    final borderPen = PdfPen(PdfColor(255, 152, 0), width: 1.5);
+
+    // Dynamic font size for checkbox symbol
+    final fontSize = (bounds.height * 0.7).clamp(10.0, 24.0);
+    page.graphics.drawRectangle(pen: borderPen, bounds: bounds);
 
     if (isChecked) {
+      final font = PdfStandardFont(PdfFontFamily.zapfDingbats, fontSize);
       page.graphics.drawString(
-        symbol,
+        '4',
         font,
-        brush: brush,
+        brush: checkBrush,
         bounds: bounds,
         format: PdfStringFormat(alignment: PdfTextAlignment.center, lineAlignment: PdfVerticalAlignment.middle),
       );
     }
-
-    // Draw checkbox border
-    final pen = PdfPen(PdfColor(100, 100, 100), width: 1);
-    page.graphics.drawRectangle(pen: pen, bounds: bounds);
   }
 
+  // Get output directory
   Future<Directory> _getOutputDirectory() async {
     Directory? outputDir;
 

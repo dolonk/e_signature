@@ -21,6 +21,8 @@ class EditorState {
   final int currentPage;
   final int totalPages;
   final Map<int, Uint8List> pageImages; // Rendered PDF pages as images
+  final double pdfPageWidth; // Actual PDF page width
+  final double pdfPageHeight; // Actual PDF page height
   final EditorMode mode;
   final bool isLoading;
   final bool isRenderingPage; // Loading state for page rendering
@@ -36,6 +38,8 @@ class EditorState {
     this.currentPage = 1,
     this.totalPages = 1,
     this.pageImages = const {},
+    this.pdfPageWidth = 0,
+    this.pdfPageHeight = 0,
     this.mode = EditorMode.edit,
     this.isLoading = false,
     this.isRenderingPage = false,
@@ -56,6 +60,8 @@ class EditorState {
     int? currentPage,
     int? totalPages,
     Map<int, Uint8List>? pageImages,
+    double? pdfPageWidth,
+    double? pdfPageHeight,
     EditorMode? mode,
     bool? isLoading,
     bool? isRenderingPage,
@@ -71,6 +77,8 @@ class EditorState {
       currentPage: currentPage ?? this.currentPage,
       totalPages: totalPages ?? this.totalPages,
       pageImages: pageImages ?? this.pageImages,
+      pdfPageWidth: pdfPageWidth ?? this.pdfPageWidth,
+      pdfPageHeight: pdfPageHeight ?? this.pdfPageHeight,
       mode: mode ?? this.mode,
       isLoading: isLoading ?? this.isLoading,
       isRenderingPage: isRenderingPage ?? this.isRenderingPage,
@@ -130,6 +138,9 @@ class EditorViewModel extends StateNotifier<EditorState> {
     state = state.copyWith(isRenderingPage: true);
 
     try {
+      // Get actual PDF page size for accurate field positioning
+      final pageSize = await _pdfRenderer.getPageSize(pageIndex);
+
       final imageBytes = await _pdfRenderer.renderPage(
         pageIndex: pageIndex,
         scale: 2.0, // Good quality for mobile
@@ -138,7 +149,12 @@ class EditorViewModel extends StateNotifier<EditorState> {
       if (imageBytes != null) {
         final updatedImages = Map<int, Uint8List>.from(state.pageImages);
         updatedImages[state.currentPage] = imageBytes;
-        state = state.copyWith(pageImages: updatedImages, isRenderingPage: false);
+        state = state.copyWith(
+          pageImages: updatedImages,
+          pdfPageWidth: pageSize?.width.toDouble() ?? 0,
+          pdfPageHeight: pageSize?.height.toDouble() ?? 0,
+          isRenderingPage: false,
+        );
       } else {
         state = state.copyWith(isRenderingPage: false, failure: const FileFailure('Failed to render page'));
       }
