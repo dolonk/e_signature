@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/entities/field_entity.dart';
 import '../../../../shared/entities/document_entity.dart';
 import '../../../../core/errors/failures.dart';
+import '../../../../core/services/pdf_generator_service.dart';
 import '../../domain/repositories/editor_repository.dart';
 
 /// Editor mode enum
@@ -18,7 +21,7 @@ class EditorState {
   final EditorMode mode;
   final bool isLoading;
   final bool isSaving;
-  final bool isPublished; // Once published, no editing allowed
+  final bool isPublished;
   final Failure? failure;
   final String? successMessage;
 
@@ -254,7 +257,6 @@ class EditorViewModel extends StateNotifier<EditorState> {
   }
 
   /// Import fields from JSON string
-  /// Returns count of imported fields or throws exception
   int importFieldsFromJson(String jsonString) {
     if (state.isPublished) throw Exception('Cannot import into published document');
 
@@ -270,25 +272,6 @@ class EditorViewModel extends StateNotifier<EditorState> {
 
       for (final fieldJson in fieldsList) {
         final map = fieldJson as Map<String, dynamic>;
-        // Use FieldEntity.fromJson which handles the map
-        // But need to ensure it handles the percentage/int conversion logic if we want to support both formats.
-        // FieldEntity.fromJson expects the map structure as defined in the class.
-        // If the export format uses percentages (which it does in current implementation of FieldEntity.toJson),
-        // then FieldEntity.fromJson works directly.
-        // If we want to support the "int" format we added in the View for readability, we should ideally handle it in FieldEntity.fromJson
-        // OR normalize it here.
-        // Since FieldEntity.fromJson calls from the view's previous logic handled both, I should replicate that robustness or update FieldEntity.
-
-        // For robustness, let's normalize here before creating entity
-        // Actually, FieldEntity.fromJson is standard.
-        // The View logic was:
-        // double xPercent = map['xPercent']?.toDouble() ?? (map['x'] as num).toDouble() / 1000;
-
-        // To keep ViewModel clean, we should rely on FieldEntity.fromJson being capable OR handle the map here.
-        // Let's modify the map to ensure compatibility if needed, but let's assume the JSON matches standard Entity format
-        // OR update FieldEntity.fromJson later to be more robust.
-        // For now, I will use the robust logic I used in View inside this method.
-
         double xPercent = map['xPercent']?.toDouble() ?? (map['x'] != null ? (map['x'] as num).toDouble() / 1000 : 0.0);
         double yPercent = map['yPercent']?.toDouble() ?? (map['y'] != null ? (map['y'] as num).toDouble() / 1000 : 0.0);
         double widthPercent =
@@ -321,13 +304,83 @@ class EditorViewModel extends StateNotifier<EditorState> {
     }
   }
 
+  /// Save fields to a file for export
+  Future<File> saveExportFile(String fileName) async {
+    final jsonString = exportFieldsToJson();
+
+    try {
+      Directory? exportDir;
+      if (Platform.isAndroid) {
+        final extDir = await getExternalStorageDirectory();
+        if (extDir != null) {
+          final pathParts = extDir.path.split('/');
+          final downloadPath = '/${pathParts[1]}/${pathParts[2]}/${pathParts[3]}/Download';
+          exportDir = Directory(downloadPath);
+        }
+      }
+
+      exportDir ??= await getApplicationDocumentsDirectory();
+
+      if (!await exportDir.exists()) {
+        await exportDir.create(recursive: true);
+      }
+
+      final file = File('${exportDir.path}/$fileName');
+      await file.writeAsString(jsonString);
+
+      return file;
+    } catch (e) {
+      throw FileFailure('Failed to save export file: $e');
+    }
+  }
+
   /// Clear messages
   void clearMessages() {
     state = state.copyWith(failure: null, successMessage: null);
   }
 
+  /// Validate if all required fields are filled
+  List<String> validateFormSubmission() {
+    final missingFieldIds = <String>[];
+
+    for (final field in state.fields) {
+      if (field.isRequired) {
+        final value = field.value;
+        if (value == null) {
+          missingFieldIds.add(field.id);
+        } else if (value is String && value.trim().isEmpty) {
+          missingFieldIds.add(field.id);
+        }
+      }
+    }
+
+    return missingFieldIds;
+  }
+
   /// Set total pages (called from PDF viewer)
   void setTotalPages(int pages) {
     state = state.copyWith(totalPages: pages);
+  }
+
+  /// Generate final signed PDF with all field values overlaid
+  Future<File?> generateFinalPdf() async {
+    if (state.document == null) {
+      state = state.copyWith(failure: const FileFailure('No document loaded'));
+      return null;
+    }
+
+    state = state.copyWith(isLoading: true);
+
+    try {
+      final pdfService = PdfGeneratorService();
+      final outputFile = await pdfService.generateSignedPdf(document: state.document!, fields: state.fields);
+
+      state = state.copyWith(isLoading: false, successMessage: 'PDF generated successfully!');
+
+      return outputFile;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, failure: FileFailure('Failed to generate PDF: $e'));
+      return null;
+    }
   }
 }

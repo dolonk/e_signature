@@ -29,7 +29,7 @@ dependencies:
   path_provider: ^2.1.5
   
   # PDF
-  syncfusion_flutter_pdf: ^28.1.33
+  syncfusion_flutter_pdf: ^28.2.12
   syncfusion_flutter_pdfviewer: ^28.1.33
   
   # Signature

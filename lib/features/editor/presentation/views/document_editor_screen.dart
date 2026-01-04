@@ -5,7 +5,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import '../../../../shared/entities/document_entity.dart';
 import '../../../../shared/entities/field_entity.dart';
 import '../../../../core/di/injection_container.dart';
@@ -67,8 +66,14 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
       appBar: _buildAppBar(editorState),
       body: Column(
         children: [
-          if (editorState.isPublished) _buildPublishedBanner(),
-          Expanded(child: _buildPdfViewerWithOverlay(editorState, isEditMode)),
+          Expanded(
+            child: Stack(
+              children: [
+                _buildPdfViewerWithOverlay(editorState, isEditMode),
+                if (editorState.isPublished) Positioned(top: 0, left: 0, right: 0, child: _buildPublishedBanner()),
+              ],
+            ),
+          ),
           if (editorState.totalPages > 1)
             PageNavigation(
               currentPage: editorState.currentPage,
@@ -151,28 +156,13 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
             ),
           ],
         ),
-        if (isEditMode && !isPublished)
-          state.isSaving
-              ? Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.w),
-                  child: const Center(
-                    child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                  ),
-                )
-              : IconButton(
-                  icon: const Icon(Icons.save),
-                  onPressed: () => ref.read(editorViewModelProvider.notifier).saveFields(),
-                  tooltip: 'Save',
-                ),
+
         if (!isPublished)
           TextButton.icon(
             onPressed: _toggleMode,
-            icon: Icon(
-              isEditMode ? Icons.visibility : Icons.edit,
-              color: isEditMode ? AppColors.info : AppColors.primary,
-            ),
+            icon: Icon(isEditMode ? Icons.draw : Icons.edit, color: isEditMode ? AppColors.info : AppColors.primary),
             label: Text(
-              isEditMode ? 'Preview' : 'Edit',
+              isEditMode ? 'Signing' : 'Edit Mode',
               style: TextStyle(color: isEditMode ? AppColors.info : AppColors.primary),
             ),
           ),
@@ -190,6 +180,20 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
               ),
             ),
           ),
+        if (state.isPublished)
+          Padding(
+            padding: EdgeInsets.only(right: 8.w),
+            child: ElevatedButton.icon(
+              onPressed: _onFinishSigning,
+              icon: Icon(Icons.check, size: 18.sp),
+              label: const Text('Finish'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 12.w),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -197,30 +201,10 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
   /// Export fields to JSON file
   Future<void> _exportFieldsJson() async {
     final viewModel = ref.read(editorViewModelProvider.notifier);
-    // Use ViewModel to generate JSON
-    final jsonString = viewModel.exportFieldsToJson();
+    final fileName = '${widget.document.name.replaceAll(' ', '_')}_fields.json';
 
     try {
-      // Save to Downloads folder using external storage on Android
-      Directory? exportDir;
-      if (Platform.isAndroid) {
-        final extDir = await getExternalStorageDirectory();
-        if (extDir != null) {
-          final pathParts = extDir.path.split('/');
-          final downloadPath = '/${pathParts[1]}/${pathParts[2]}/${pathParts[3]}/Download';
-          exportDir = Directory(downloadPath);
-        }
-      }
-
-      exportDir ??= await getApplicationDocumentsDirectory();
-
-      if (!await exportDir.exists()) {
-        await exportDir.create(recursive: true);
-      }
-
-      final fileName = '${widget.document.name.replaceAll(' ', '_')}_fields.json';
-      final file = File('${exportDir.path}/$fileName');
-      await file.writeAsString(jsonString);
+      final file = await viewModel.saveExportFile(fileName);
 
       if (!mounted) return;
 
@@ -289,7 +273,7 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Export failed: $e'), backgroundColor: AppColors.error));
+        ).showSnackBar(SnackBar(content: Text('Export failed: ${e.toString()}'), backgroundColor: AppColors.error));
       }
     }
   }
@@ -516,5 +500,212 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
         );
       }
     }
+  }
+
+  void _onFinishSigning() async {
+    final viewModel = ref.read(editorViewModelProvider.notifier);
+    final missingIds = viewModel.validateFormSubmission();
+
+    if (missingIds.isEmpty) {
+      await viewModel.saveFields();
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => _SigningCompleteDialog(
+          onClose: () {
+            Navigator.pop(dialogContext);
+            Navigator.pop(context); // Go back to home
+          },
+          onDownloadPdf: () async {
+            Navigator.pop(dialogContext);
+            _generateAndShowPdf();
+          },
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${missingIds.length} required field(s) are missing!'),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      // Optional: Highlight fields or scroll to first missing field
+    }
+  }
+
+  Future<void> _generateAndShowPdf() async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            SizedBox(height: 16.h),
+            const Text('Generating PDF...'),
+          ],
+        ),
+      ),
+    );
+
+    final viewModel = ref.read(editorViewModelProvider.notifier);
+    final file = await viewModel.generateFinalPdf();
+
+    if (!mounted) return;
+    Navigator.pop(context); // Close loading dialog
+
+    if (file != null) {
+      // Show success dialog with options
+      showModalBottomSheet(
+        context: context,
+        builder: (ctx) => Padding(
+          padding: EdgeInsets.all(16.w),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.check_circle, color: AppColors.success, size: 24.sp),
+                  SizedBox(width: 8.w),
+                  Text(
+                    'PDF Generated!',
+                    style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12.h),
+              Text(
+                'Saved to:',
+                style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+              ),
+              SizedBox(height: 4.h),
+              Container(
+                padding: EdgeInsets.all(8.w),
+                decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8.r)),
+                child: Text(
+                  file.path,
+                  style: TextStyle(fontSize: 12.sp, fontFamily: 'monospace'),
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.pop(context); // Go back to home
+                      },
+                      icon: const Icon(Icons.check),
+                      label: const Text('Done'),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        // Preview signed PDF
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => _PdfPreviewScreen(filePath: file.path)),
+                        );
+                      },
+                      icon: const Icon(Icons.visibility),
+                      label: const Text('Preview'),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await SharePlus.instance.share(
+                          ShareParams(files: [XFile(file.path)], subject: 'Signed - ${widget.document.name}'),
+                        );
+                      },
+                      icon: const Icon(Icons.share),
+                      label: const Text('Share'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to generate PDF'), backgroundColor: AppColors.error));
+    }
+  }
+}
+
+/// Dialog shown after signing is complete
+class _SigningCompleteDialog extends StatelessWidget {
+  final VoidCallback onClose;
+  final VoidCallback onDownloadPdf;
+
+  const _SigningCompleteDialog({required this.onClose, required this.onDownloadPdf});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Signing Complete'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle, color: AppColors.success, size: 64.sp),
+          SizedBox(height: 16.h),
+          const Text('All required fields have been filled.'),
+          SizedBox(height: 8.h),
+          Text(
+            'Download the signed PDF or close the document.',
+            style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: onClose, child: const Text('Close')),
+        ElevatedButton.icon(
+          onPressed: onDownloadPdf,
+          icon: const Icon(Icons.download),
+          label: const Text('Download PDF'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Simple PDF Preview Screen
+class _PdfPreviewScreen extends StatelessWidget {
+  final String filePath;
+
+  const _PdfPreviewScreen({required this.filePath});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Signed PDF Preview'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: () async {
+              await SharePlus.instance.share(ShareParams(files: [XFile(filePath)]));
+            },
+          ),
+        ],
+      ),
+      body: SfPdfViewer.file(File(filePath)),
+    );
   }
 }

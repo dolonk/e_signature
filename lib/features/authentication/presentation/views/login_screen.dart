@@ -117,12 +117,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 // Forgot Password
                 Align(
                   alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      // TODO: Implement forgot password
-                    },
-                    child: const Text('Forgot Password?'),
-                  ),
+                  child: TextButton(onPressed: () {}, child: const Text('Forgot Password?')),
                 ),
                 Gap(24.h),
                 // Login Button
