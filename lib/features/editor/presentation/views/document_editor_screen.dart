@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gap/gap.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
@@ -25,20 +26,15 @@ class DocumentEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
-  final GlobalKey<SfPdfViewerState> _pdfViewerKey = GlobalKey();
-  PdfViewerController? _pdfController;
   FieldType? _selectedFieldType;
 
   @override
   void initState() {
     super.initState();
-    _pdfController = PdfViewerController();
-  }
-
-  @override
-  void dispose() {
-    _pdfController?.dispose();
-    super.dispose();
+    // Initialize document and render first page
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(editorViewModelProvider.notifier).initDocumentWithRendering(widget.document);
+    });
   }
 
   @override
@@ -65,43 +61,28 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
       backgroundColor: AppColors.background,
       appBar: _buildAppBar(editorState),
       body: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Expanded(
-            child: Stack(
+          Gap(24.h),
+          Expanded(child: _buildPdfViewerWithOverlay(editorState, isEditMode)),
+          Gap(24.h),
+
+          SizedBox(
+            height: 160.h,
+            child: Column(
               children: [
-                _buildPdfViewerWithOverlay(editorState, isEditMode),
-                if (editorState.isPublished) Positioned(top: 0, left: 0, right: 0, child: _buildPublishedBanner()),
+                if (editorState.totalPages > 1)
+                  PageNavigation(
+                    currentPage: editorState.currentPage,
+                    totalPages: editorState.totalPages,
+                    onFirstPage: () => ref.read(editorViewModelProvider.notifier).firstPage(),
+                    onPreviousPage: () => ref.read(editorViewModelProvider.notifier).previousPage(),
+                    onNextPage: () => ref.read(editorViewModelProvider.notifier).nextPage(),
+                    onLastPage: () => ref.read(editorViewModelProvider.notifier).lastPage(),
+                  ),
+                if (isEditMode) FieldToolbar(onFieldSelected: _onFieldTypeSelected, isEnabled: true),
               ],
             ),
-          ),
-          if (editorState.totalPages > 1)
-            PageNavigation(
-              currentPage: editorState.currentPage,
-              totalPages: editorState.totalPages,
-              onFirstPage: () => ref.read(editorViewModelProvider.notifier).firstPage(),
-              onPreviousPage: () => ref.read(editorViewModelProvider.notifier).previousPage(),
-              onNextPage: () => ref.read(editorViewModelProvider.notifier).nextPage(),
-              onLastPage: () => ref.read(editorViewModelProvider.notifier).lastPage(),
-            ),
-          if (isEditMode) FieldToolbar(onFieldSelected: _onFieldTypeSelected, isEnabled: true),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPublishedBanner() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(vertical: 8.h, horizontal: 16.w),
-      color: AppColors.success.withValues(alpha: 0.1),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.check_circle, color: AppColors.success, size: 18.sp),
-          SizedBox(width: 8.w),
-          Text(
-            'Published - Tap fields to fill and sign',
-            style: TextStyle(color: AppColors.success, fontSize: 13.sp, fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -323,8 +304,25 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
   }
 
   Widget _buildPdfViewerWithOverlay(EditorState state, bool isEditMode) {
-    final file = File(widget.document.localFilePath);
+    // Show loading while PDF is being loaded or page is rendering
+    if (state.isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(),
+            SizedBox(height: 16.h),
+            Text(
+              'Loading document...',
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
 
+    // Show error if file not found
+    final file = File(widget.document.localFilePath);
     if (!file.existsSync()) {
       return Center(
         child: Column(
@@ -341,46 +339,42 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
       );
     }
 
+    // Get current page image
+    final pageImage = state.pageImages[state.currentPage];
+
+    // Show loading if page is rendering
+    if (pageImage == null || state.isRenderingPage) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(),
+            SizedBox(height: 16.h),
+            Text(
+              'Rendering page ${state.currentPage}...',
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         return GestureDetector(
           onTapUp: isEditMode ? (details) => _onPdfTap(details, constraints) : null,
           child: Stack(
             children: [
-              SfPdfViewer.file(
-                file,
-                key: _pdfViewerKey,
-                controller: _pdfController,
-                canShowScrollHead: false,
-                canShowScrollStatus: false,
-                enableDoubleTapZooming: true,
-                onDocumentLoaded: (details) {
-                  ref.read(editorViewModelProvider.notifier).setTotalPages(details.document.pages.count);
-                  ref
-                      .read(editorViewModelProvider.notifier)
-                      .initDocument(widget.document, details.document.pages.count);
-                },
-                onPageChanged: (details) {
-                  ref.read(editorViewModelProvider.notifier).goToPage(details.newPageNumber);
-                },
-              ),
-              _buildFieldOverlay(state, isEditMode, constraints),
-              if (_selectedFieldType != null && isEditMode)
-                Positioned(
-                  top: 8.h,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(20.r)),
-                      child: Text(
-                        'Tap to place ${FieldEntity.getDisplayName(_selectedFieldType!)}',
-                        style: TextStyle(color: Colors.white, fontSize: 12.sp, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ),
+              // PDF Page displayed as Image
+              Center(
+                child: InteractiveViewer(
+                  minScale: 1.0,
+                  maxScale: 3.0,
+                  child: Image.memory(pageImage /*fit: BoxFit.contain, width: constraints.maxWidth*/),
                 ),
+              ),
+              // Field overlays
+              _buildFieldOverlay(state, isEditMode, constraints),
             ],
           ),
         );
@@ -420,14 +414,8 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
   }
 
   void _onFieldTypeSelected(FieldType type) {
-    setState(() => _selectedFieldType = type);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Tap on document to place ${FieldEntity.getDisplayName(type)}'),
-        duration: const Duration(seconds: 2),
-        backgroundColor: AppColors.info,
-      ),
-    );
+    // Add field directly at center position
+    ref.read(editorViewModelProvider.notifier).addField(type, 0.3, 0.4);
   }
 
   void _onPdfTap(TapUpDetails details, BoxConstraints constraints) {

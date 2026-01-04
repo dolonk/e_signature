@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/entities/field_entity.dart';
 import '../../../../shared/entities/document_entity.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/services/pdf_generator_service.dart';
+import '../../../../core/services/pdf_page_renderer_service.dart';
 import '../../domain/repositories/editor_repository.dart';
 
 /// Editor mode enum
@@ -18,8 +20,10 @@ class EditorState {
   final FieldEntity? selectedField;
   final int currentPage;
   final int totalPages;
+  final Map<int, Uint8List> pageImages; // Rendered PDF pages as images
   final EditorMode mode;
   final bool isLoading;
+  final bool isRenderingPage; // Loading state for page rendering
   final bool isSaving;
   final bool isPublished;
   final Failure? failure;
@@ -31,8 +35,10 @@ class EditorState {
     this.selectedField,
     this.currentPage = 1,
     this.totalPages = 1,
+    this.pageImages = const {},
     this.mode = EditorMode.edit,
     this.isLoading = false,
+    this.isRenderingPage = false,
     this.isSaving = false,
     this.isPublished = false,
     this.failure,
@@ -49,8 +55,10 @@ class EditorState {
     bool clearSelection = false,
     int? currentPage,
     int? totalPages,
+    Map<int, Uint8List>? pageImages,
     EditorMode? mode,
     bool? isLoading,
+    bool? isRenderingPage,
     bool? isSaving,
     bool? isPublished,
     Failure? failure,
@@ -62,14 +70,19 @@ class EditorState {
       selectedField: clearSelection ? null : (selectedField ?? this.selectedField),
       currentPage: currentPage ?? this.currentPage,
       totalPages: totalPages ?? this.totalPages,
+      pageImages: pageImages ?? this.pageImages,
       mode: mode ?? this.mode,
       isLoading: isLoading ?? this.isLoading,
+      isRenderingPage: isRenderingPage ?? this.isRenderingPage,
       isSaving: isSaving ?? this.isSaving,
       isPublished: isPublished ?? this.isPublished,
       failure: failure,
       successMessage: successMessage,
     );
   }
+
+  /// Get current page image
+  Uint8List? get currentPageImage => pageImages[currentPage];
 
   factory EditorState.initial() => const EditorState();
   factory EditorState.loading() => const EditorState(isLoading: true);
@@ -78,15 +91,75 @@ class EditorState {
 /// ViewModel for document editor
 class EditorViewModel extends StateNotifier<EditorState> {
   final EditorRepository? _repository;
+  final PdfPageRendererService _pdfRenderer = PdfPageRendererService();
 
   EditorViewModel([this._repository]) : super(EditorState.initial());
 
-  /// Initialize with document
+  /// Initialize with document and render the first page
+  Future<void> initDocumentWithRendering(DocumentEntity document) async {
+    state = state.copyWith(document: document, isLoading: true);
+
+    try {
+      // Open PDF and get page count
+      final totalPages = await _pdfRenderer.openPdf(document.localFilePath);
+      state = state.copyWith(totalPages: totalPages, currentPage: 1);
+
+      // Load saved fields if repository available
+      if (_repository != null) {
+        await _loadSavedFields(document.id);
+      }
+
+      // Render first page
+      await renderCurrentPage();
+
+      state = state.copyWith(isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, failure: FileFailure('Failed to open PDF: $e'));
+    }
+  }
+
+  /// Render the current page as image
+  Future<void> renderCurrentPage() async {
+    final pageIndex = state.currentPage - 1; // 0-based index
+
+    // Check if already rendered
+    if (state.pageImages.containsKey(state.currentPage)) {
+      return;
+    }
+
+    state = state.copyWith(isRenderingPage: true);
+
+    try {
+      final imageBytes = await _pdfRenderer.renderPage(
+        pageIndex: pageIndex,
+        scale: 2.0, // Good quality for mobile
+      );
+
+      if (imageBytes != null) {
+        final updatedImages = Map<int, Uint8List>.from(state.pageImages);
+        updatedImages[state.currentPage] = imageBytes;
+        state = state.copyWith(pageImages: updatedImages, isRenderingPage: false);
+      } else {
+        state = state.copyWith(isRenderingPage: false, failure: const FileFailure('Failed to render page'));
+      }
+    } catch (e) {
+      state = state.copyWith(isRenderingPage: false, failure: FileFailure('Error rendering page: $e'));
+    }
+  }
+
+  /// Legacy init method (for backward compatibility)
   void initDocument(DocumentEntity document, int totalPages) {
     state = state.copyWith(document: document, totalPages: totalPages, isLoading: false);
     if (_repository != null) {
       _loadSavedFields(document.id);
     }
+  }
+
+  /// Clean up resources
+  @override
+  void dispose() {
+    _pdfRenderer.closePdf();
+    super.dispose();
   }
 
   /// Load saved fields from repository
@@ -210,17 +283,18 @@ class EditorViewModel extends StateNotifier<EditorState> {
     }
   }
 
-  /// Navigate to page
-  void goToPage(int page) {
+  /// Navigate to page and render it
+  Future<void> goToPage(int page) async {
     if (page >= 1 && page <= state.totalPages) {
       state = state.copyWith(currentPage: page, clearSelection: true);
+      await renderCurrentPage();
     }
   }
 
-  void nextPage() => goToPage(state.currentPage + 1);
-  void previousPage() => goToPage(state.currentPage - 1);
-  void firstPage() => goToPage(1);
-  void lastPage() => goToPage(state.totalPages);
+  Future<void> nextPage() => goToPage(state.currentPage + 1);
+  Future<void> previousPage() => goToPage(state.currentPage - 1);
+  Future<void> firstPage() => goToPage(1);
+  Future<void> lastPage() => goToPage(state.totalPages);
 
   /// Get fields for current page
   List<FieldEntity> get currentPageFields {
