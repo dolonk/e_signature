@@ -5,10 +5,9 @@ import '../../../../shared/entities/field_entity.dart';
 import '../../../../core/theme/app_colors.dart';
 
 // Minimum sizes as percentage of page
-const double kMinWidthPercent = 0.12; // ~12% of page width
-const double kMinHeightPercent = 0.04; // ~4% of page height
+const double kMinWidthPercent = 0.12;
+const double kMinHeightPercent = 0.04;
 
-/// Draggable and resizable field widget for PDF overlay
 class DraggableField extends StatefulWidget {
   final FieldEntity field;
   final bool isSelected;
@@ -223,7 +222,7 @@ class _DraggableFieldState extends State<DraggableField> {
         }
         return Text(
           value.toString(),
-          style: TextStyle(fontSize: 14.sp, fontFamily: 'Cursive', color: Colors.black87),
+          style: TextStyle(fontSize: 14, fontFamily: 'Cursive', color: Colors.black87),
           overflow: TextOverflow.ellipsis,
         );
       case FieldType.text:

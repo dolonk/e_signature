@@ -5,6 +5,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../shared/entities/field_entity.dart';
 import '../../shared/entities/document_entity.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 class PdfGeneratorService {
   /// Generate a signed PDF by overlaying field values onto the original document
@@ -66,7 +67,7 @@ class PdfGeneratorService {
     return outputFile;
   }
 
-  // Text draw
+  // Text draw Box
   void _drawText(PdfPage page, String text, Rect bounds) {
     final fontSize = (bounds.height * 0.55).clamp(8.0, 20.0);
     final font = PdfStandardFont(PdfFontFamily.helvetica, fontSize, style: PdfFontStyle.bold);
@@ -81,12 +82,18 @@ class PdfGeneratorService {
     );
   }
 
-  // Signature text draw
-  void _drawSignatureText(PdfPage page, String text, Rect bounds) {
-    final fontSize = (bounds.height * 0.60).clamp(10.0, 24.0);
-    final font = PdfStandardFont(PdfFontFamily.timesRoman, fontSize, style: PdfFontStyle.italic);
-    final brush = PdfSolidBrush(PdfColor(33, 33, 33));
+  // Signature text Box
+  void _drawSignatureText(PdfPage page, String text, Rect bounds) async {
+    final ByteData fontData = await rootBundle.load('assets/fonts/DancingScript-Regular.ttf');
+    final Uint8List fontBytes = fontData.buffer.asUint8List();
 
+    // Create PdfTrueTypeFont with custom font
+    final PdfTrueTypeFont font = PdfTrueTypeFont(fontBytes, 14);
+
+    // Define brush color (Colors.black87 equivalent)
+    final PdfBrush brush = PdfSolidBrush(PdfColor(33, 33, 33));
+
+    // Draw text on PDF
     page.graphics.drawString(
       text,
       font,
@@ -113,11 +120,11 @@ class PdfGeneratorService {
   // Checkbox draw
   void _drawCheckbox(PdfPage page, bool isChecked, Rect bounds) {
     final checkBrush = PdfSolidBrush(PdfColor(255, 152, 0));
-    final borderPen = PdfPen(PdfColor(255, 152, 0), width: 1.5);
+    //final borderPen = PdfPen(PdfColor(255, 152, 0), width: 1.5);
 
     // Dynamic font size for checkbox symbol
     final fontSize = (bounds.height * 0.7).clamp(10.0, 24.0);
-    page.graphics.drawRectangle(pen: borderPen, bounds: bounds);
+    page.graphics.drawRectangle(/*pen: borderPen,*/ bounds: bounds);
 
     if (isChecked) {
       final font = PdfStandardFont(PdfFontFamily.zapfDingbats, fontSize);
