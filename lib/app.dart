@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:interview_app/route/route_name.dart';
-import 'package:interview_app/route/router_config.dart';
+import 'package:e_signature/route/route_name.dart';
+import 'package:e_signature/route/router_config.dart';
 import 'core/theme/app_theme.dart';
 
 class MyApp extends ConsumerWidget {
@@ -18,7 +18,7 @@ class MyApp extends ConsumerWidget {
           title: 'e-Signature',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
-          initialRoute: RouteName.login,
+          initialRoute: RouteName.splash,
           onGenerateRoute: RouteConfig.generateRoute,
         );
       },

@@ -322,6 +322,29 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
   }
 
   Widget _buildPdfViewerWithOverlay(EditorStateEntity state, bool isEditMode) {
+    // Check for unsupported file types (DOC/DOCX)
+    final extension = widget.document.fileType.toLowerCase();
+    if (extension == 'doc' || extension == 'docx') {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.description, size: 64.sp, color: AppColors.primary),
+            Gap(16.h),
+            Text(
+              'Word Document Support Coming Soon!',
+              style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            ),
+            Gap(8.h),
+            Text(
+              'Please convert to PDF to sign this document.',
+              style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
     // Show loading while PDF is being loaded or page is rendering
     if (state.isLoading) {
       return Center(

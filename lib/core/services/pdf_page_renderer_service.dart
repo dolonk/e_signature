@@ -15,6 +15,10 @@ class PdfPageRendererService {
       await closePdf();
     }
 
+    if (filePath.toLowerCase().endsWith('.doc') || filePath.toLowerCase().endsWith('.docx')) {
+      return 0;
+    }
+
     _pdf = PdfImageRenderer(path: filePath);
     await _pdf!.open();
     _pageCount = await _pdf!.getPageCount();
@@ -29,9 +33,6 @@ class PdfPageRendererService {
   /// Check if PDF is currently open
   bool get isOpen => _pdf != null;
 
-  /// Render a specific page as image
-  /// [pageIndex] is 0-based
-  /// [scale] controls image quality (1.0 = 100%, 2.0 = 200%)
   Future<Uint8List?> renderPage({required int pageIndex, double scale = 2.0}) async {
     if (_pdf == null) {
       throw Exception('PDF not opened. Call openPdf() first.');
@@ -69,21 +70,6 @@ class PdfPageRendererService {
       } catch (_) {}
       rethrow;
     }
-  }
-
-  /// Render all pages (useful for small PDFs)
-  /// Returns a map of pageIndex -> imageBytes
-  Future<Map<int, Uint8List>> renderAllPages({double scale = 2.0}) async {
-    final pages = <int, Uint8List>{};
-
-    for (int i = 0; i < _pageCount; i++) {
-      final bytes = await renderPage(pageIndex: i, scale: scale);
-      if (bytes != null) {
-        pages[i] = bytes;
-      }
-    }
-
-    return pages;
   }
 
   /// Get page dimensions (useful for aspect ratio calculations)

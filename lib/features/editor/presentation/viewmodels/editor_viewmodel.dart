@@ -30,10 +30,8 @@ class EditorViewModel extends StateNotifier<EditorStateEntity> {
       state = state.copyWith(totalPages: totalPages, currentPage: 1);
 
       // Load saved fields if repository available
-      if (_repository != null) {
-        await _loadSavedFields(document.id);
-      }
-
+      await _loadSavedFields(document.id);
+    
       // Render first page
       await renderCurrentPage();
 
@@ -80,10 +78,8 @@ class EditorViewModel extends StateNotifier<EditorStateEntity> {
   /// Legacy init method (for backward compatibility)
   void initDocument(DocumentEntity document, int totalPages) {
     state = state.copyWith(document: document, totalPages: totalPages, isLoading: false);
-    if (_repository != null) {
-      _loadSavedFields(document.id);
+    _loadSavedFields(document.id);
     }
-  }
 
   /// Clean up resources
   @override
@@ -94,8 +90,6 @@ class EditorViewModel extends StateNotifier<EditorStateEntity> {
 
   /// Load saved fields from repository
   Future<void> _loadSavedFields(int documentId) async {
-    if (_repository == null) return;
-
     final result = await _repository.loadFieldConfig(documentId);
     result.fold((failure) => state = state.copyWith(failure: failure), (fields) {
       if (fields.isNotEmpty) {
@@ -106,7 +100,7 @@ class EditorViewModel extends StateNotifier<EditorStateEntity> {
 
   /// Save fields to repository
   Future<void> saveFields() async {
-    if (_repository == null || state.document == null) {
+    if (state.document == null) {
       state = state.copyWith(failure: const FileFailure('Cannot save: repository not available'));
       return;
     }
