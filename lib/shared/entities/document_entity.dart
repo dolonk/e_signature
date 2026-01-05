@@ -1,9 +1,6 @@
 import 'package:isar_community/isar.dart';
-
 part 'document_entity.g.dart';
 
-/// Document entity for Isar database
-/// Shared across home, documents, and editor features
 @collection
 class DocumentEntity {
   Id id = Isar.autoIncrement;

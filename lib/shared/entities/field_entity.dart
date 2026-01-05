@@ -1,5 +1,8 @@
 library;
 
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+
 enum FieldType { signature, text, checkbox, date }
 
 class FieldEntity {
@@ -140,6 +143,19 @@ class FieldEntity {
 
   /// Convert to JSON for export
   Map<String, dynamic> toJson() {
+    dynamic jsonValue = value;
+
+    debugPrint('toJson - Field: $id, Type: ${type.name}');
+    debugPrint('Value type: ${value?.runtimeType}');
+    debugPrint('Is Uint8List: ${value is Uint8List}');
+
+    if (value is Uint8List) {
+      final bytes = value as Uint8List;
+      debugPrint('Converting Uint8List (${bytes.length} bytes) to base64');
+      jsonValue = {'type': 'bytes', 'data': base64Encode(bytes)};
+      debugPrint('Converted to map format');
+    }
+
     return {
       'id': id,
       'type': type.name,
@@ -148,7 +164,7 @@ class FieldEntity {
       'yPercent': yPercent,
       'widthPercent': widthPercent,
       'heightPercent': heightPercent,
-      'value': value,
+      'value': jsonValue,
       'isRequired': isRequired,
       'label': label,
     };
@@ -156,6 +172,56 @@ class FieldEntity {
 
   /// Create from JSON
   factory FieldEntity.fromJson(Map<String, dynamic> json) {
+    dynamic fieldValue = json['value'];
+
+    debugPrint('fromJson - Field: ${json['id']}, Type: ${json['type']}');
+    debugPrint('Raw value type: ${fieldValue?.runtimeType}');
+    debugPrint(
+      '   Raw value: ${fieldValue.toString().substring(0, fieldValue.toString().length > 100 ? 100 : fieldValue.toString().length)}...',
+    );
+
+    // Handle different formats for byte data (signature)
+    if (fieldValue != null && json['type'] == 'signature') {
+      try {
+        // Format 1: TYPE
+        if (fieldValue is Map && fieldValue['type'] == 'bytes' && fieldValue['data'] != null) {
+          debugPrint('Format: Map with base64 data');
+          final decoded = base64Decode(fieldValue['data'] as String);
+          debugPrint('Decoded to Uint8List (${decoded.length} bytes)');
+          fieldValue = decoded;
+        }
+        // Format 2: DRAW
+        else if (fieldValue is List) {
+          debugPrint('Format: List of integers');
+          if (fieldValue.isNotEmpty && fieldValue.first is int) {
+            final converted = Uint8List.fromList(fieldValue.cast<int>());
+            debugPrint('Converted to Uint8List (${converted.length} bytes)');
+            fieldValue = converted;
+          }
+        }
+        // Format 3:IMAGE SIGNATURE
+        else if (fieldValue is String) {
+          debugPrint('   Format: String (length: ${fieldValue.length})');
+          if (fieldValue.length > 50 && !fieldValue.contains(' ')) {
+            try {
+              final decoded = base64Decode(fieldValue);
+              debugPrint(' Decoded base64 string to Uint8List (${decoded.length} bytes)');
+              fieldValue = decoded;
+            } catch (_) {
+              debugPrint(' Not base64, keeping as text signature');
+            }
+          } else {
+            debugPrint('Short string, treating as text signature');
+          }
+        }
+
+        debugPrint('Final value type: ${fieldValue.runtimeType}');
+        debugPrint('Is Uint8List: ${fieldValue is Uint8List}');
+      } catch (e) {
+        debugPrint('Error decoding signature data: $e');
+      }
+    }
+
     return FieldEntity(
       id: json['id'] as String,
       type: FieldType.values.firstWhere((e) => e.name == json['type']),
@@ -164,7 +230,7 @@ class FieldEntity {
       yPercent: (json['yPercent'] as num).toDouble(),
       widthPercent: (json['widthPercent'] as num).toDouble(),
       heightPercent: (json['heightPercent'] as num).toDouble(),
-      value: json['value'],
+      value: fieldValue,
       isRequired: json['isRequired'] as bool? ?? false,
       label: json['label'] as String?,
     );

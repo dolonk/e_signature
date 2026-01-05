@@ -51,7 +51,6 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
 
     // Listen for document upload success and navigate to editor
     ref.listen(documentViewModelProvider, (previous, next) {
-      // Handle errors (exclude initialization errors)
       if (next.failure != null && !next.failure!.message.contains('not initialized')) {
         ScaffoldMessenger.of(
           context,
@@ -100,12 +99,11 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
         currentIndex: _currentIndex,
         onTap: (index) {
           if (index == 1) {
-            // Upload button - trigger file picker, stay on home
             _onUploadPressed();
           } else if (index == 0) {
             setState(() => _currentIndex = 0);
           } else if (index == 2) {
-            setState(() => _currentIndex = 1); // Profile is now index 1 in IndexedStack
+            setState(() => _currentIndex = 1);
           }
         },
         type: BottomNavigationBarType.fixed,

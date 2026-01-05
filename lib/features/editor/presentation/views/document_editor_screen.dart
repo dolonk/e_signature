@@ -40,8 +40,6 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final editorState = ref.watch(editorViewModelProvider);
-    final isEditMode = editorState.canEdit;
-
     ref.listen(editorViewModelProvider, (previous, next) {
       if (next.failure != null) {
         ScaffoldMessenger.of(
@@ -56,6 +54,7 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
         ref.read(editorViewModelProvider.notifier).clearMessages();
       }
     });
+    final isEditMode = editorState.canEdit;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -124,6 +123,7 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
                 ],
               ),
             ),
+
             PopupMenuItem(
               value: 'import',
               enabled: !isPublished,
@@ -141,10 +141,7 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
         if (!isPublished)
           TextButton.icon(
             onPressed: _toggleMode,
-            icon: Icon(
-              isEditMode ? Icons.draw : Icons.edit,
-              color: isEditMode ? AppColors.info : AppColors.primary,
-            ),
+            icon: Icon(isEditMode ? Icons.draw : Icons.edit, color: isEditMode ? AppColors.info : AppColors.primary),
             label: Text(
               isEditMode ? 'Signing' : 'Edit Mode',
               style: TextStyle(color: isEditMode ? AppColors.info : AppColors.primary),
@@ -188,7 +185,7 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
     final fileName = '${widget.document.name.replaceAll(' ', '_')}_fields.json';
 
     try {
-      final file = await viewModel.saveExportFile(fileName);
+      final file = await viewModel.exportFieldsToJson(fileName);
       if (!mounted) return;
 
       showModalBottomSheet(
@@ -209,24 +206,24 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
                   ),
                 ],
               ),
-              SizedBox(height: 12.h),
+              Gap(12.h),
+
               Text(
                 'Saved to:',
                 style: TextStyle(fontSize: 14.sp, color: AppColors.textSecondary),
               ),
-              SizedBox(height: 4.h),
+              Gap(4.h),
+
               Container(
                 padding: EdgeInsets.all(8.w),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8.r),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8.r)),
                 child: Text(
                   file.path,
                   style: TextStyle(fontSize: 12.sp, fontFamily: 'monospace'),
                 ),
               ),
-              SizedBox(height: 16.h),
+              Gap(16.h),
+
               Row(
                 children: [
                   Expanded(
@@ -236,16 +233,14 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
                       label: const Text('Done'),
                     ),
                   ),
-                  SizedBox(width: 12.w),
+                  Gap(12.w),
+
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         Navigator.pop(ctx);
                         await SharePlus.instance.share(
-                          ShareParams(
-                            files: [XFile(file.path)],
-                            subject: 'Field Config - ${widget.document.name}',
-                          ),
+                          ShareParams(files: [XFile(file.path)], subject: 'Field Config - ${widget.document.name}'),
                         );
                       },
                       icon: const Icon(Icons.share),
@@ -260,9 +255,9 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: ${e.toString()}'), backgroundColor: AppColors.error),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Export failed: ${e.toString()}'), backgroundColor: AppColors.error));
       }
     }
   }
@@ -441,10 +436,8 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
               }
             },
             onDelete: () => ref.read(editorViewModelProvider.notifier).deleteField(field.id),
-            onPositionChanged: (x, y) =>
-                ref.read(editorViewModelProvider.notifier).updateFieldPosition(field.id, x, y),
-            onSizeChanged: (w, h) =>
-                ref.read(editorViewModelProvider.notifier).updateFieldSize(field.id, w, h),
+            onPositionChanged: (x, y) => ref.read(editorViewModelProvider.notifier).updateFieldPosition(field.id, x, y),
+            onSizeChanged: (w, h) => ref.read(editorViewModelProvider.notifier).updateFieldSize(field.id, w, h),
           );
         }).toList(),
       ),
@@ -521,18 +514,12 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
     if (currentMode == EditorMode.edit) {
       editorNotifier.enterSignMode();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Preview mode - Tap fields to test input'),
-          backgroundColor: AppColors.info,
-        ),
+        const SnackBar(content: Text('Preview mode - Tap fields to test input'), backgroundColor: AppColors.info),
       );
     } else {
       editorNotifier.enterEditMode();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Edit mode - Drag fields to reposition'),
-          backgroundColor: AppColors.info,
-        ),
+        const SnackBar(content: Text('Edit mode - Drag fields to reposition'), backgroundColor: AppColors.info),
       );
     }
   }
@@ -582,10 +569,7 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
 
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Document published successfully!'),
-            backgroundColor: AppColors.success,
-          ),
+          const SnackBar(content: Text('Document published successfully!'), backgroundColor: AppColors.success),
         );
       }
     }
@@ -675,10 +659,7 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
               SizedBox(height: 4.h),
               Container(
                 padding: EdgeInsets.all(8.w),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8.r),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8.r)),
                 child: Text(
                   file.path,
                   style: TextStyle(fontSize: 12.sp, fontFamily: 'monospace'),
@@ -732,9 +713,9 @@ class _DocumentEditorScreenState extends ConsumerState<DocumentEditorScreen> {
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to generate PDF'), backgroundColor: AppColors.error),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to generate PDF'), backgroundColor: AppColors.error));
     }
   }
 }

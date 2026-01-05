@@ -2,7 +2,6 @@ import 'package:isar_community/isar.dart';
 import '../../../../shared/entities/document_entity.dart';
 import '../../../../core/errors/exceptions.dart';
 
-/// Data source for home feature - reads documents from Isar
 abstract class HomeLocalDataSource {
   /// Get all documents for a user
   Future<List<DocumentEntity>> getDocuments(String userId);

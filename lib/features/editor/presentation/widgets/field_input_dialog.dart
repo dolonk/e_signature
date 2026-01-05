@@ -206,7 +206,7 @@ class _FieldInputDialogState extends State<FieldInputDialog> with SingleTickerPr
                 child: Image.memory(_uploadedSignature!, fit: BoxFit.contain),
               ),
               SizedBox(height: 8.h),
-              Text(_uploadedFileName ?? 'Image loaded'),
+
               TextButton(
                 onPressed: () => setState(() {
                   _uploadedSignature = null;

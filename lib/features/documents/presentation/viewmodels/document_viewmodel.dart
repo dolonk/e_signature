@@ -11,7 +11,7 @@ class DocumentState {
   final bool isInitializing;
   final Failure? failure;
   final String? successMessage;
-  final DocumentEntity? lastUploadedDocument; // For navigation after upload
+  final DocumentEntity? lastUploadedDocument;
 
   const DocumentState({
     this.documents = const [],

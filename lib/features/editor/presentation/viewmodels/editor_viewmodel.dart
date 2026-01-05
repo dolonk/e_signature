@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/entities/field_entity.dart';
@@ -20,12 +21,12 @@ class EditorState {
   final FieldEntity? selectedField;
   final int currentPage;
   final int totalPages;
-  final Map<int, Uint8List> pageImages; // Rendered PDF pages as images
-  final double pdfPageWidth; // Actual PDF page width
-  final double pdfPageHeight; // Actual PDF page height
+  final Map<int, Uint8List> pageImages;
+  final double pdfPageWidth;
+  final double pdfPageHeight;
   final EditorMode mode;
   final bool isLoading;
-  final bool isRenderingPage; // Loading state for page rendering
+  final bool isRenderingPage;
   final bool isSaving;
   final bool isPublished;
   final Failure? failure;
@@ -141,10 +142,7 @@ class EditorViewModel extends StateNotifier<EditorState> {
       // Get actual PDF page size for accurate field positioning
       final pageSize = await _pdfRenderer.getPageSize(pageIndex);
 
-      final imageBytes = await _pdfRenderer.renderPage(
-        pageIndex: pageIndex,
-        scale: 2.0, // Good quality for mobile
-      );
+      final imageBytes = await _pdfRenderer.renderPage(pageIndex: pageIndex, scale: 2.0);
 
       if (imageBytes != null) {
         final updatedImages = Map<int, Uint8List>.from(state.pageImages);
@@ -336,62 +334,10 @@ class EditorViewModel extends StateNotifier<EditorState> {
   }
 
   /// Generate JSON string for export
-  String exportFieldsToJson() {
+  Future<File> exportFieldsToJson(String fileName) async {
     final jsonData = {'fields': state.fields.map((f) => f.toJson()).toList()};
-    return const JsonEncoder.withIndent('  ').convert(jsonData);
-  }
-
-  /// Import fields from JSON string
-  int importFieldsFromJson(String jsonString) {
-    if (state.isPublished) throw Exception('Cannot import into published document');
-
-    try {
-      final jsonData = jsonDecode(jsonString) as Map<String, dynamic>;
-
-      if (!jsonData.containsKey('fields')) {
-        throw FormatException('Invalid JSON: missing "fields" array');
-      }
-
-      final fieldsList = jsonData['fields'] as List<dynamic>;
-      final importedFields = <FieldEntity>[];
-
-      for (final fieldJson in fieldsList) {
-        final map = fieldJson as Map<String, dynamic>;
-        double xPercent = map['xPercent']?.toDouble() ?? (map['x'] != null ? (map['x'] as num).toDouble() / 1000 : 0.0);
-        double yPercent = map['yPercent']?.toDouble() ?? (map['y'] != null ? (map['y'] as num).toDouble() / 1000 : 0.0);
-        double widthPercent =
-            map['widthPercent']?.toDouble() ?? (map['width'] != null ? (map['width'] as num).toDouble() / 1000 : 0.1);
-        double heightPercent =
-            map['heightPercent']?.toDouble() ??
-            (map['height'] != null ? (map['height'] as num).toDouble() / 1000 : 0.05);
-
-        importedFields.add(
-          FieldEntity(
-            id: map['id'] as String? ?? FieldEntity.generateId(),
-            type: FieldType.values.firstWhere((t) => t.name == map['type'], orElse: () => FieldType.text),
-            page: map['page'] as int? ?? 1,
-            xPercent: xPercent.clamp(0.0, 1.0),
-            yPercent: yPercent.clamp(0.0, 1.0),
-            widthPercent: widthPercent.clamp(0.01, 1.0),
-            heightPercent: heightPercent.clamp(0.01, 1.0),
-            value: map['value'], // Could be string or null
-            isRequired: map['isRequired'] as bool? ?? false,
-            label: map['label'] as String?,
-          ),
-        );
-      }
-
-      state = state.copyWith(fields: importedFields, successMessage: 'Imported ${importedFields.length} fields');
-      return importedFields.length;
-    } catch (e) {
-      state = state.copyWith(failure: FileFailure('Failed to import fields: $e'));
-      rethrow;
-    }
-  }
-
-  /// Save fields to a file for export
-  Future<File> saveExportFile(String fileName) async {
-    final jsonString = exportFieldsToJson();
+    final jsonString = JsonEncoder.withIndent('  ').convert(jsonData);
+    debugPrint("jsonString: $jsonString");
 
     try {
       Directory? exportDir;
@@ -405,17 +351,88 @@ class EditorViewModel extends StateNotifier<EditorState> {
       }
 
       exportDir ??= await getApplicationDocumentsDirectory();
+      debugPrint("exportDir: $exportDir");
 
       if (!await exportDir.exists()) {
         await exportDir.create(recursive: true);
       }
 
       final file = File('${exportDir.path}/$fileName');
-      await file.writeAsString(jsonString);
 
+      // Explicitly delete if exists to ensure clean overwrite
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (e) {
+          debugPrint('Error deleting existing file: $e');
+        }
+      }
+
+      await file.writeAsString(jsonString, flush: true);
+
+      debugPrint("File: $file");
       return file;
     } catch (e) {
       throw FileFailure('Failed to save export file: $e');
+    }
+  }
+
+  /// Import fields from JSON string
+  int importFieldsFromJson(String jsonString) {
+    if (state.isPublished) throw Exception('Cannot import into published document');
+
+    try {
+      final jsonData = jsonDecode(jsonString) as Map<String, dynamic>;
+      print("Import fields: $jsonData");
+
+      if (!jsonData.containsKey('fields')) {
+        throw FormatException('Invalid JSON: missing "fields" array');
+      }
+
+      final fieldsList = jsonData['fields'] as List<dynamic>;
+      final importedFields = <FieldEntity>[];
+
+      for (final fieldJson in fieldsList) {
+        final map = fieldJson as Map<String, dynamic>;
+
+        // Use FieldEntity.fromJson to properly handle signature value conversion
+        try {
+          importedFields.add(FieldEntity.fromJson(map));
+        } catch (e) {
+          debugPrint('Error parsing field from JSON: $e');
+          // Fallback to manual construction for backward compatibility
+          double xPercent =
+              map['xPercent']?.toDouble() ?? (map['x'] != null ? (map['x'] as num).toDouble() / 1000 : 0.0);
+          double yPercent =
+              map['yPercent']?.toDouble() ?? (map['y'] != null ? (map['y'] as num).toDouble() / 1000 : 0.0);
+          double widthPercent =
+              map['widthPercent']?.toDouble() ?? (map['width'] != null ? (map['width'] as num).toDouble() / 1000 : 0.1);
+          double heightPercent =
+              map['heightPercent']?.toDouble() ??
+              (map['height'] != null ? (map['height'] as num).toDouble() / 1000 : 0.05);
+
+          importedFields.add(
+            FieldEntity(
+              id: map['id'] as String? ?? FieldEntity.generateId(),
+              type: FieldType.values.firstWhere((t) => t.name == map['type'], orElse: () => FieldType.text),
+              page: map['page'] as int? ?? 1,
+              xPercent: xPercent.clamp(0.0, 1.0),
+              yPercent: yPercent.clamp(0.0, 1.0),
+              widthPercent: widthPercent.clamp(0.01, 1.0),
+              heightPercent: heightPercent.clamp(0.01, 1.0),
+              value: map['value'],
+              isRequired: map['isRequired'] as bool? ?? false,
+              label: map['label'] as String?,
+            ),
+          );
+        }
+      }
+
+      state = state.copyWith(fields: importedFields, successMessage: 'Imported ${importedFields.length} fields');
+      return importedFields.length;
+    } catch (e) {
+      state = state.copyWith(failure: FileFailure('Failed to import fields: $e'));
+      rethrow;
     }
   }
 
